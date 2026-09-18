@@ -77,6 +77,21 @@
     opacity:0; pointer-events:none; z-index:6; transition:all .25s;
   }
   #toast.show{ opacity:1; transform:translate(-50%,-50%) scale(1.15); }
+  #wishBanner{
+    position:absolute; top:156px; left:50%; transform:translateX(-50%);
+    width:calc(100% - 36px); max-width:400px;
+    background:rgba(255,255,255,.92); backdrop-filter:blur(6px);
+    border:1.5px solid #ffccd8; border-radius:999px;
+    padding:6px 14px; font-size:13px; font-weight:700; color:#b7466e;
+    text-align:center; box-shadow:0 4px 14px rgba(255,100,140,.18);
+    pointer-events:none; z-index:4;
+    opacity:0; transition:opacity .32s ease, transform .32s ease;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #wishBanner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #wishBanner.fade{ opacity:0; transform:translateX(-50%) translateY(-5px); }
+  #wishAuthor{ color:#d6336c; font-weight:900; }
+  #wishText{ color:#7a3c53; }
   footer{ text-align:center; font-size:12px; color:#b58093; padding:8px; background:#fff; }
   kbd{ background:#c2416e; color:#fff; border-radius:6px; padding:1px 7px; font-size:12px;}
 </style>
@@ -95,6 +110,7 @@
   <div id="stage">
     <div id="combo"></div>
     <div id="toast"></div>
+    <div id="wishBanner">💌 <span id="wishAuthor">親友團</span>：<span id="wishText">百年好合，永結同心！🌹</span></div>
     <canvas id="game" width="480" height="640"></canvas>
 
     <!-- 開始畫面 -->
@@ -196,9 +212,75 @@ canvas.addEventListener('touchstart', e=>{ audio(); if(state==='playing'){ playe
 canvas.addEventListener('mousedown', ()=> audio());
 
 // ---- 遊戲流程 ----
+// 3 秒隨機祝福語系統 (串接 Cloudflare D1 a1)
+const wishBanner = document.getElementById('wishBanner');
+const wishAuthor = document.getElementById('wishAuthor');
+const wishText = document.getElementById('wishText');
+
+let wishTimer = null;
+const DEFAULT_WISHES = [
+  { author: '親友團', content: '百年好合，永結同心！🌹' },
+  { author: '伴娘', content: '執子之手，與子偕老 💍' },
+  { author: '好友小美', content: '新婚愉快，甜甜蜜蜜！💗' },
+  { author: '伴郎阿強', content: '願你們的愛情如玫瑰般永遠綻放 ✨' },
+  { author: '大伯母', content: '琴瑟和鳴，相敬如賓 💒' },
+  { author: '奶奶', content: '永浴愛河，早生貴子 👶' },
+  { author: '大學同學', content: '執手並肩，幸福一生一世 🌸' },
+  { author: '同事情友', content: '佳偶天成，天作之合 🥂' },
+  { author: '表姊', content: '白頭偕老，恩愛一生！💑' },
+  { author: '閨蜜', content: '願每個明天都比今天更加相愛 💕' }
+];
+let wishCache = [...DEFAULT_WISHES];
+
+async function fetchRandomWish(){
+  try {
+    const res = await fetch('/api/wish', { cache: 'no-store' });
+    if(res.ok){
+      const json = await res.json();
+      if(json && json.data && json.data.content){
+        if(!wishCache.some(w => w.content === json.data.content)){
+          wishCache.push(json.data);
+        }
+        return json.data;
+      }
+    }
+  } catch(e){}
+  const idx = Math.floor(Math.random() * wishCache.length);
+  return wishCache[idx];
+}
+
+async function triggerNextWish(){
+  if(state !== 'playing') return;
+  const nextWish = await fetchRandomWish();
+  if(!nextWish || state !== 'playing') return;
+
+  wishBanner.classList.add('fade');
+  setTimeout(()=>{
+    wishAuthor.textContent = nextWish.author || '賓客';
+    wishText.textContent = nextWish.content;
+    wishBanner.classList.remove('fade');
+    wishBanner.classList.add('show');
+  }, 320);
+}
+
+function startWishLoop(){
+  triggerNextWish();
+  wishBanner.classList.add('show');
+  clearInterval(wishTimer);
+  wishTimer = setInterval(triggerNextWish, 3000); // 遊戲每 3 秒隨機輪播
+}
+
+function stopWishLoop(){
+  clearInterval(wishTimer);
+  wishTimer = null;
+  wishBanner.classList.remove('show');
+  wishBanner.classList.remove('fade');
+}
+
 document.getElementById('startBtn').onclick = ()=>{ audio(); startGame(); };
 document.getElementById('restartBtn').onclick = ()=>{ audio(); startGame(); };
 document.getElementById('backBtn').onclick = ()=>{
+  stopWishLoop();
   endScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); state='ready';
 };
 
@@ -209,6 +291,7 @@ function startGame(){
   updateHUD();
   startScreen.classList.add('hidden'); endScreen.classList.add('hidden');
   state='playing'; lastTime = performance.now();
+  startWishLoop(); // 啟動每 3 秒隨機新婚祝福語
   showToast('💒 開始！', 900);
   beep(523,.12,'triangle',.25); beep(659,.12,'triangle',.25,.12); beep(784,.2,'triangle',.25,.24);
   requestAnimationFrame(loop);
@@ -216,6 +299,7 @@ function startGame(){
 
 function endGame(win){
   state='over';
+  stopWishLoop(); // 停止祝福語輪播
   weddingSong();
   // 玫瑰雨慶祝
   if(win){ for(let i=0;i<80;i++) spawnCelebrate(); }
@@ -232,6 +316,10 @@ function endGame(win){
   } else {
     title = '💒 婚禮完成！';
     html = `得到 <b>${score} 分</b><br>雖然玫瑰少了點，但愛意滿滿 💗<br>最高 <b>${bestCombo}</b> 連擊，再玩一次收集更多愛吧！`;
+  }
+  const finishWish = wishCache[Math.floor(Math.random()*wishCache.length)];
+  if(finishWish) {
+    html += `<div style="margin-top:12px;font-size:13px;color:#d6336c;background:#fff;padding:8px 12px;border-radius:12px;border:1.5px dashed #f0a6bd;">💌 <b>${finishWish.author}</b>：${finishWish.content}</div>`;
   }
   setTimeout(()=>{
     endTitle.textContent = title; endText.innerHTML = html;
