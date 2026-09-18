@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>💒 婚禮小遊戲：新郎接玫瑰</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family: "PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
+    background: radial-gradient(circle at 50% 20%, #ffe4ec 0%, #ffc9d9 35%, #e8a0bf 70%, #b76e8f 100%);
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:12px; overflow:hidden;
+  }
+  body::before{
+    content:"💗 💒 💍 💗 💐 💗 💒 💍 💗 💐";
+    position:fixed; top:-40px; left:0; right:0; text-align:center; font-size:28px;
+    opacity:.35; animation: fallBg 9s linear infinite; pointer-events:none; white-space:nowrap;
+  }
+  @keyframes fallBg { to { transform: translateY(110vh); } }
+  #wrap {
+    width:min(480px,100vw - 16px);
+    background: #fff7f9;
+    border-radius:24px; overflow:hidden;
+    box-shadow: 0 20px 60px rgba(150,40,80,.4), 0 0 0 6px #fff inset, 0 0 0 8px #f7b8cd inset;
+    position:relative;
+  }
+  header {
+    background: linear-gradient(135deg,#ff6b9d,#ff9ebb 55%,#ffb3c7);
+    color:#fff; text-align:center; padding:12px 8px 10px; position:relative;
+  }
+  header h1{ font-size:22px; letter-spacing:2px; text-shadow:0 2px 6px rgba(150,20,60,.4);}
+  header p{ font-size:13px; opacity:.95; margin-top:2px;}
+  #hud {
+    display:flex; justify-content:space-between; align-items:center;
+    background:#fff; padding:8px 12px; font-size:15px; font-weight:700; color:#c2416e;
+    border-bottom:2px dashed #f7b8cd;
+  }
+  #hud .pill{ background:#ffe4ec; border-radius:999px; padding:4px 12px; }
+  #stage{ position:relative; background: linear-gradient(#fff0f4 0%, #ffe0e9 60%, #ffd2e0 100%); }
+  canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:pointer;}
+  /* overlays */
+  .overlay{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:rgba(255,240,245,.92); backdrop-filter: blur(3px);
+    padding:24px 20px; z-index:5; transition:opacity .3s;
+  }
+  .overlay.hidden{ opacity:0; pointer-events:none; }
+  .couple{ display:flex; align-items:flex-end; gap:6px; margin-bottom:10px;}
+  .couple img{ filter: drop-shadow(0 8px 12px rgba(180,60,100,.35)); }
+  .couple img.bride{ width:120px; animation: sway 2.2s ease-in-out infinite; }
+  .couple img.groom{ width:100px; animation: sway 2.2s ease-in-out infinite reverse; }
+  @keyframes sway { 0%,100%{transform:rotate(-3deg) translateY(0)} 50%{transform:rotate(3deg) translateY(-6px)} }
+  .rose-deco{ width:64px; animation: spinFloat 3s ease-in-out infinite; }
+  @keyframes spinFloat{ 0%,100%{transform:rotate(-12deg) translateY(0)} 50%{transform:rotate(12deg) translateY(-8px)} }
+  .title{ font-size:26px; color:#c2416e; font-weight:900; margin:6px 0; }
+  .sub{ font-size:14px; color:#8a4a63; line-height:1.7; margin-bottom:14px;}
+  .sub b{ color:#d6336c; }
+  .btn{
+    font-size:18px; font-weight:900; color:#fff; border:none; cursor:pointer;
+    background: linear-gradient(135deg,#ff4d7e,#ff85a8);
+    padding:14px 42px; border-radius:999px; letter-spacing:2px;
+    box-shadow:0 8px 20px rgba(255,77,126,.5); transition:transform .15s;
+  }
+  .btn:active{ transform:scale(.94); }
+  .btn.small{ font-size:15px; padding:10px 28px; margin-top:10px; background:linear-gradient(135deg,#b76e8f,#d89ab2);}
+  .hint{ margin-top:12px; font-size:12.5px; color:#a0677f; line-height:1.6; background:#fff; border-radius:12px; padding:8px 12px; border:1.5px dashed #f0a6bd;}
+  #combo{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    font-weight:900; color:#ff4d7e; font-size:20px; text-shadow:0 2px 0 #fff,0 0 12px #ffd1de;
+    opacity:0; transition:opacity .2s; pointer-events:none; z-index:4;
+  }
+  #toast{
+    position:absolute; top:44%; left:50%; transform:translate(-50%,-50%) scale(.8);
+    font-size:42px; font-weight:900; color:#ff2f6d; text-shadow:0 3px 0 #fff,0 0 24px #ffb3c7;
+    opacity:0; pointer-events:none; z-index:6; transition:all .25s;
+  }
+  #toast.show{ opacity:1; transform:translate(-50%,-50%) scale(1.15); }
+  footer{ text-align:center; font-size:12px; color:#b58093; padding:8px; background:#fff; }
+  kbd{ background:#c2416e; color:#fff; border-radius:6px; padding:1px 7px; font-size:12px;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>💒 新郎接玫瑰 🌹</h1>
+    <p>接到新娘的愛・集滿幸福舉辦婚禮！</p>
+  </header>
+  <div id="hud">
+    <span class="pill">🌹 <span id="score">0</span> 分</span>
+    <span class="pill">⏰ <span id="time">60</span>s</span>
+    <span class="pill">💗 <span id="life">💗💗💗</span></span>
+  </div>
+  <div id="stage">
+    <div id="combo"></div>
+    <div id="toast"></div>
+    <canvas id="game" width="480" height="640"></canvas>
+
+    <!-- 開始畫面 -->
+    <div class="overlay" id="startScreen">
+      <div class="couple">
+        <img class="bride" src="p1.png" alt="新娘">
+        <img class="rose-deco" src="rose1.png" alt="玫瑰">
+        <img class="groom" src="p2.png" alt="新郎">
+      </div>
+      <div class="title">💍 婚禮大作戰 💍</div>
+      <div class="sub">新娘在拋灑愛的玫瑰！<br>操作<b>新郎</b>左右移動接住 <b>🌹玫瑰 +10分</b><br>✨ <b>金玫瑰 +30分</b>・💔 別碰到！<br>漏接玫瑰會失去一顆愛心，<b>60 秒</b>後舉行婚禮 💒</div>
+      <button class="btn" id="startBtn">開始遊戲 💒</button>
+      <div class="hint">🖱️ 滑鼠移動 / 手指拖曳 / <kbd>←</kbd><kbd>→</kbd> 或 <kbd>A</kbd><kbd>D</kbd> 移動新郎</div>
+    </div>
+
+    <!-- 結束畫面 -->
+    <div class="overlay hidden" id="endScreen">
+      <div class="couple" id="endCouple">
+        <img class="bride" src="p1.png" alt="新娘">
+        <img class="groom" src="p2.png" alt="新郎">
+      </div>
+      <div class="title" id="endTitle">🎉 新婚快樂！</div>
+      <div class="sub" id="endText"></div>
+      <button class="btn" id="restartBtn">再玩一次 💗</button>
+      <button class="btn small" id="backBtn">回開始畫面</button>
+    </div>
+  </div>
+  <footer>Made with 💗 ・ 素材：p1新娘 / p2新郎 / rose1玫瑰</footer>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const lifeEl = document.getElementById('life');
+const comboEl = document.getElementById('combo');
+const toastEl = document.getElementById('toast');
+const startScreen = document.getElementById('startScreen');
+const endScreen = document.getElementById('endScreen');
+const endTitle = document.getElementById('endTitle');
+const endText = document.getElementById('endText');
+
+// 載入素材
+const imgBride = new Image(); imgBride.src = 'p1.png';
+const imgGroom = new Image(); imgGroom.src = 'p2.png';
+const imgRose = new Image(); imgRose.src = 'rose1.png';
+
+let state = 'ready'; // ready | playing | over
+let score = 0, lives = 3, timeLeft = 60, combo = 0, bestCombo = 0;
+let items = [], particles = [], floatTexts = [];
+let lastTime = 0, spawnTimer = 0, timeTimer = 0, elapsed = 0;
+let shake = 0;
+
+const player = { x: W/2, w: 92, h: 128, speed: 340, targetX: W/2 };
+let keys = {};
+
+// ---- 音效 (WebAudio，不需外部檔) ----
+let AC = null;
+function audio(){ if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume(); return AC; }
+function beep(freq, t=0.12, type='sine', vol=0.25, when=0){
+  try{
+    const ac = audio(), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ac.currentTime + when);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + when + t);
+    o.connect(g); g.connect(ac.destination);
+    o.start(ac.currentTime + when); o.stop(ac.currentTime + when + t + 0.02);
+  }catch(e){}
+}
+const sCatch = () => { beep(660,.1,'sine',.22); beep(990,.14,'sine',.18,.07); };
+const sGold  = () => { beep(523,.1,'triangle',.25); beep(659,.1,'triangle',.25,.09); beep(784,.18,'triangle',.25,.18); };
+const sMiss  = () => { beep(220,.25,'sawtooth',.12); };
+const sBad   = () => { beep(160,.3,'square',.14); };
+function weddingSong(){
+  // 簡易婚禮進行曲：do do re do fa mi
+  const notes = [262,262,294,262,349,330, 262,262,294,262,392,349, 262,262,523,440,349,330,294, 494,494,440,349,392,330];
+  notes.forEach((f,i)=> beep(f,.28,'triangle',.2, i*0.22));
+}
+
+// ---- 操作 ----
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if(['arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+  if(state==='ready' && (e.key===' '||e.key==='Enter')) startGame();
+  if(state==='over' && (e.key===' '||e.key==='Enter')) startGame();
+});
+window.addEventListener('keyup', e=> keys[e.key.toLowerCase()] = false);
+
+function pointerX(e){
+  const r = canvas.getBoundingClientRect();
+  const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+  return (cx - r.left) / r.width * W;
+}
+canvas.addEventListener('mousemove', e=>{ if(state==='playing') player.targetX = pointerX(e); });
+canvas.addEventListener('touchmove', e=>{ if(state==='playing'){ player.targetX = pointerX(e); e.preventDefault(); } }, {passive:false});
+canvas.addEventListener('touchstart', e=>{ audio(); if(state==='playing'){ player.targetX = pointerX(e);} }, {passive:true});
+canvas.addEventListener('mousedown', ()=> audio());
+
+// ---- 遊戲流程 ----
+document.getElementById('startBtn').onclick = ()=>{ audio(); startGame(); };
+document.getElementById('restartBtn').onclick = ()=>{ audio(); startGame(); };
+document.getElementById('backBtn').onclick = ()=>{
+  endScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); state='ready';
+};
+
+function startGame(){
+  score=0; lives=3; timeLeft=60; combo=0; bestCombo=0;
+  items=[]; particles=[]; floatTexts=[]; elapsed=0; spawnTimer=0; timeTimer=0; shake=0;
+  player.x = W/2; player.targetX = W/2;
+  updateHUD();
+  startScreen.classList.add('hidden'); endScreen.classList.add('hidden');
+  state='playing'; lastTime = performance.now();
+  showToast('💒 開始！', 900);
+  beep(523,.12,'triangle',.25); beep(659,.12,'triangle',.25,.12); beep(784,.2,'triangle',.25,.24);
+  requestAnimationFrame(loop);
+}
+
+function endGame(win){
+  state='over';
+  weddingSong();
+  // 玫瑰雨慶祝
+  if(win){ for(let i=0;i<80;i++) spawnCelebrate(); }
+  let title, html;
+  if(!win){
+    title = '💔 愛心用完了…';
+    html = `只得到 <b>${score} 分</b><br>新娘說：「再努力一點嘛！」<br>最高連擊 <b>${bestCombo}</b> 連接！`;
+  } else if(score >= 350){
+    title = '💍💒 完美婚禮！💒💍';
+    html = `幸福爆棚 <b>${score} 分</b>！<br>最高 <b>${bestCombo}</b> 連擊！<br>賓客全場歡呼，新人永浴愛河 💗<br>🌹🌹🌹🌹🌹`;
+  } else if(score >= 180){
+    title = '🎉 新婚快樂！';
+    html = `得到 <b>${score} 分</b>，婚禮成功舉行！<br>最高 <b>${bestCombo}</b> 連擊<br>再接再厲挑戰完美婚禮吧 💪`;
+  } else {
+    title = '💒 婚禮完成！';
+    html = `得到 <b>${score} 分</b><br>雖然玫瑰少了點，但愛意滿滿 💗<br>最高 <b>${bestCombo}</b> 連擊，再玩一次收集更多愛吧！`;
+  }
+  setTimeout(()=>{
+    endTitle.textContent = title; endText.innerHTML = html;
+    endScreen.classList.remove('hidden');
+  }, win ? 1200 : 400);
+}
+
+function updateHUD(){
+  scoreEl.textContent = score;
+  timeEl.textContent = Math.ceil(timeLeft);
+  lifeEl.textContent = '💗'.repeat(Math.max(lives,0)) + '🤍'.repeat(Math.max(3-lives,0));
+}
+function showToast(txt, ms=700){
+  toastEl.textContent = txt; toastEl.classList.add('show');
+  clearTimeout(showToast._t); showToast._t = setTimeout(()=>toastEl.classList.remove('show'), ms);
+}
+
+// ---- 生成掉落物 ----
+function spawnItem(){
+  const r = Math.random();
+  let type = 'rose';
+  if(r < 0.70) type='rose'; else if(r < 0.84) type='gold'; else type='bad';
+  const diff = 1 + (60 - timeLeft) / 60 * 1.2; // 越來越快
+  items.push({
+    type,
+    x: 30 + Math.random()*(W-60),
+    y: -50,
+    vy: (140 + Math.random()*90) * diff,
+    sway: Math.random()*Math.PI*2,
+    rot: Math.random()*Math.PI*2,
+    size: type==='gold' ? 52 : 46
+  });
+}
+function spawnCelebrate(){
+  particles.push({
+    x: Math.random()*W, y: -20 - Math.random()*H,
+    vx:(Math.random()-.5)*60, vy: 80+Math.random()*160,
+    life: 3+Math.random()*2, t:0, size: 18+Math.random()*26,
+    char: ['🌹','💗','💐','✨','💍'][Math.floor(Math.random()*5)]
+  });
+}
+function burst(x,y,n=12,chars=['💗','✨','🌹']){
+  for(let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, sp = 60+Math.random()*180;
+    particles.push({x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-80, life:.7+Math.random()*.5, t:0,
+      size:12+Math.random()*16, char: chars[Math.floor(Math.random()*chars.length)]});
+  }
+}
+
+// ---- 主迴圈 ----
+function loop(now){
+  if(state!=='playing') return;
+  let dt = Math.min((now-lastTime)/1000, 0.05); lastTime = now;
+  elapsed += dt;
+
+  // 移動
+  const keySpeed = 360*dt;
+  if(keys['arrowleft']||keys['a']) { player.targetX -= keySpeed*1.4; player.x -= keySpeed*1.4; }
+  if(keys['arrowright']||keys['d']) { player.targetX += keySpeed*1.4; player.x += keySpeed*1.4; }
+  player.targetX = Math.max(player.w/2-10, Math.min(W-player.w/2+10, player.targetX));
+  player.x += (player.targetX - player.x) * Math.min(1, dt*12);
+  player.x = Math.max(player.w/2-10, Math.min(W-player.w/2+10, player.x));
+
+  // 生成
+  spawnTimer -= dt;
+  const interval = Math.max(0.32, 0.75 - elapsed*0.008);
+  if(spawnTimer<=0){ spawnItem(); if(elapsed>20 && Math.random()<0.4) spawnItem(); spawnTimer = interval; }
+
+  // 計時
+  timeTimer += dt;
+  if(timeTimer>=1){ timeTimer-=1; timeLeft-=1; updateHUD();
+    if(timeLeft<=10 && timeLeft>0) beep(880,.08,'sine',.15);
+    if(timeLeft<=0){ updateHUD(); draw(); endGame(lives>0); return; }
+  }
+
+  // 更新掉落物
+  const catchY = H - 110;
+  for(let i=items.length-1;i>=0;i--){
+    const it = items[i];
+    it.y += it.vy*dt; it.sway += dt*3; it.rot += dt*2;
+    it.x += Math.sin(it.sway)*30*dt;
+    const caught = it.y > catchY-24 && it.y < catchY+52 && Math.abs(it.x-player.x) < player.w/2+6;
+    if(caught){
+      if(it.type==='rose'){ score+=10; combo++; bestCombo=Math.max(bestCombo,combo); sCatch(); burst(it.x,it.y,10); addFloat(it.x,it.y,'+10','#e64980'); }
+      else if(it.type==='gold'){ score+=30; combo++; bestCombo=Math.max(bestCombo,combo); sGold(); burst(it.x,it.y,18,['✨','🌹','💛']); addFloat(it.x,it.y,'+30 金玫瑰!','#b8860b'); showToast('✨ 金玫瑰！',500); }
+      else { score=Math.max(0,score-15); combo=0; sBad(); shake=10; burst(it.x,it.y,10,['💔','🖤']); addFloat(it.x,it.y,'-15','#555'); showToast('💔 哎呀！',500); }
+      items.splice(i,1); updateHUD(); updateCombo(); continue;
+    }
+    if(it.y > H+40){
+      items.splice(i,1);
+      if(it.type!=='bad'){
+        lives--; combo=0; sMiss(); shake=8; updateHUD(); updateCombo();
+        showToast(lives>0 ? '漏接了！' : '💔', 600);
+        if(lives<=0){ draw(); endGame(false); return; }
+      }
+    }
+  }
+
+  // 粒子
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i]; p.t+=dt;
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=140*dt;
+    if(p.t>p.life) particles.splice(i,1);
+  }
+  for(let i=floatTexts.length-1;i>=0;i--){
+    const f=floatTexts[i]; f.t+=dt; f.y-=50*dt;
+    if(f.t>0.9) floatTexts.splice(i,1);
+  }
+  if(shake>0) shake-=dt*40;
+
+  updateCombo();
+  draw();
+  requestAnimationFrame(loop);
+}
+function addFloat(x,y,txt,color){ floatTexts.push({x,y,txt,color,t:0}); }
+function updateCombo(){
+  if(combo>=3){ comboEl.style.opacity=1; comboEl.textContent=`🔥 ${combo} 連擊！`; }
+  else comboEl.style.opacity=0;
+}
+
+// ---- 繪製 ----
+let brideT = 0;
+function draw(){
+  brideT += 0.03;
+  ctx.save();
+  if(shake>0) ctx.translate((Math.random()-.5)*shake, (Math.random()-.5)*shake);
+  // 背景
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#fff5f7'); g.addColorStop(.6,'#ffe0e9'); g.addColorStop(1,'#ffd2e0');
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+
+  // 地毯走道
+  ctx.fillStyle='#f8a9c0'; ctx.fillRect(0,H-70,W,70);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,H-70,W,6);
+  ctx.fillStyle='rgba(255,255,255,.5)';
+  for(let x=20;x<W;x+=60){ ctx.beginPath(); ctx.ellipse(x,H-34,14,8,0,0,7); ctx.fill(); }
+
+  // 頂部新娘（會左右搖擺丟花）
+  const bx = W/2 + Math.sin(brideT)*60;
+  const bw=86, bh=120;
+  try{ ctx.drawImage(imgBride, bx-bw/2, 8, bw, bh); }catch(e){}
+  ctx.font='16px sans-serif'; ctx.textAlign='center';
+  ctx.fillStyle='#c2416e'; ctx.fillText('新娘拋花中 💐', bx, 142);
+
+  // 掉落物
+  for(const it of items){
+    ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(Math.sin(it.rot)*0.3);
+    if(it.type==='bad'){
+      ctx.font = it.size+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      // 暗色圓底凸顯危險
+      ctx.fillStyle='rgba(60,0,20,.18)'; ctx.beginPath(); ctx.arc(0,0,it.size/2+6,0,7); ctx.fill();
+      ctx.fillText('💔',0,2);
+    } else {
+      if(it.type==='gold'){
+        ctx.shadowColor='#ffd43b'; ctx.shadowBlur=22;
+        ctx.globalAlpha=.95;
+      }
+      try{ ctx.drawImage(imgRose, -it.size/2, -it.size/2, it.size, it.size); }catch(e){
+        ctx.font=it.size+'px serif'; ctx.fillText('🌹',0,0);
+      }
+      ctx.shadowBlur=0; ctx.globalAlpha=1;
+      if(it.type==='gold'){ ctx.font='bold 13px sans-serif'; ctx.fillStyle='#9a6b00'; ctx.fillText('GOLD',0,it.size/2+12); }
+    }
+    ctx.restore();
+  }
+
+  // 接球線提示
+  ctx.strokeStyle='rgba(194,65,110,.25)'; ctx.setLineDash([8,8]); ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(10,H-110); ctx.lineTo(W-10,H-110); ctx.stroke(); ctx.setLineDash([]);
+
+  // 新郎
+  const px = player.x, py = H-100;
+  // 影子
+  ctx.fillStyle='rgba(120,30,60,.2)'; ctx.beginPath(); ctx.ellipse(px,py+player.h/2+8,42,10,0,0,7); ctx.fill();
+  try{ ctx.drawImage(imgGroom, px-player.w/2, py-player.h/2, player.w, player.h); }catch(e){
+    ctx.fillStyle='#334155'; ctx.fillRect(px-30,py-50,60,100);
+  }
+  // 連擊光環
+  if(combo>=5){ ctx.strokeStyle='#ffd43b'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(px,py,62+Math.sin(brideT*2)*4,0,7); ctx.stroke(); }
+
+  // 粒子
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const p of particles){ ctx.globalAlpha = Math.max(0,1-p.t/p.life); ctx.font=p.size+'px serif'; ctx.fillText(p.char,p.x,p.y); }
+  ctx.globalAlpha=1;
+
+  // 浮字
+  for(const f of floatTexts){
+    ctx.globalAlpha = 1-f.t/0.9; ctx.font='bold 20px sans-serif';
+    ctx.lineWidth=4; ctx.strokeStyle='#fff'; ctx.strokeText(f.txt,f.x,f.y);
+    ctx.fillStyle=f.color; ctx.fillText(f.txt,f.x,f.y);
+  }
+  ctx.globalAlpha=1;
+
+  // 倒數警示
+  if(timeLeft<=10){ ctx.fillStyle = (Math.floor(elapsed*4)%2? '#ff2f6d':'#c2416e'); ctx.font='bold 26px sans-serif'; ctx.fillText(`⏰ ${Math.ceil(timeLeft)}`, W-60, 170); }
+
+  ctx.restore();
+}
+draw(); // 預繪背景
+updateHUD();
+</script>
+</body>
+</html>
